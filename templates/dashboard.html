@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+
+
+{% block head %}
+  <style>
+    .arrow { cursor: pointer; }
+    .lArr { float: left; padding-right: 10px; }
+    .rArr { float: right; padding-left: 10px; }
+    .add { color: #00cc00; }
+    .update { color: #cccc00; }
+  </style>
+{% endblock %}
+
+
+{% block body %}
+  <div class="row">
+    <div class="col-lg-12">
+      </div>
+  </div>
+  <div class="row">
+    <div class="col-lg-6">
+      <label for="a-node">A Node</label>
+      <select id="a-node" data-target="#a-results" data-opposite="b-node">
+  {% for num, node in nodes.iteritems %}
+        <option value="{{ node.host }}">{{ node.host }}</option>
+  {% endfor %}
+      </select>
+    </div>
+    <div class="col-lg-6">
+      <label for="b-node">B Node</label>
+      <select id="b-node" data-target="#b-results" data-opposite="a-node">
+  {% for num, node in nodes.iteritems %}
+        <option value="{{ node.host }}">{{ node.host }}</option>
+  {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-lg-6">
+      <label for="type">Types</label>
+      <select id="type">
+        <option value="">-- select --</option>
+  {% for type in types %}
+        <option value="{{ type }}">{{ type }}</option>
+  {% endfor %}
+      </select>
+    </div>
+    <div class="col-lg-6">
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-lg-6" id="a-results"></div>
+    <div class="col-lg-6" id="b-results"></div>
+  </div>
+{% endblock body %}
+
+
+{% block scripts %}
+<script type="application/javascript">
+var currentData = {};
+
+$(function() {
+  $('#a-node, #b-node, #type').on("change", function(e) {
+    var type = $('#type').val();
+    if (type === '') {
+      return;
+    }
+    var firstPassDone = false;
+    $('#a-node, #b-node').each(function(ii, el) {
+      if ($(el).val() === $(el).data('host') && type === $(el).data('type')) {
+        firstPassDone = true;
+        return;
+      }
+      currentData[$(el).attr('id')] = {};
+      var results = $($(el).data('target'));
+      results.empty();
+      $.ajax($(el).val() + '{% url 'api-root' %}' + type + '/', {
+        jsonp: false,
+        crossDomain: true
+      }).done(function(data, textStatus, jqXHR) {
+        $(el).data('type', type).data('host', $(el).val());
+        for (var ii = 0; ii < data.length; ++ii) {
+          currentData[$(el).attr('id')][data[ii]['pk']] = data[ii];
+          var line = '<div class="" ' +
+              'data-id="' + data[ii]['pk'] + '">' +
+              type + ': ' + data[ii]['pk'] +
+              '</div>';
+          results.append(line);
+        }
+        $(el).data('available', true);
+      }).fail(function(jqXHR, status, error) { console.log(jqXHR);
+        $(el).data('available', false);
+      }).always(function() {
+        if (! firstPassDone) { firstPassDone = true; return; }  // first pass
+        // now loop through again to compare results
+        $('#a-node, #b-node').each(function(jj, el) {
+          var results = $($(el).data('target'));
+          $('.arrow', results).remove();
+          if (! $('#' + $(el).data('opposite')).data('available')) {
+            console.log('other host not available');
+            return;
+          }
+          var data = currentData[$(el).attr('id')];
+          var other = currentData[$(el).data('opposite')];
+          var direction = jj === 0 ? 'rArr' : 'lArr';
+          var otherHost = $('#' + $(el).data('opposite')).val();
+          for (var pk in data) {
+            if (other[pk] === undefined) {
+              $('div[data-id=' + pk + ']').prepend(
+                '<div class="arrow ' + direction + ' add">&' + direction + ';</div>'
+              )
+            } else if (JSON.stringify(data[pk]) != JSON.stringify(other[pk])) {
+              $('div[data-id=' + pk + ']').prepend(
+                '<div class="arrow ' + direction + ' update">&rarr;</div>'
+              )
+            }
+            $('div[data-id=' + pk + ']').data('other-host', otherHost);
+            $('div[data-id=' + pk + '] .arrow').on('click', function(e) {
+              console.log($(e.currentTarget).parent().data('id'));
+            });
+          }
+        });
+      });
+    });
+  });
+});
+</script>
+{% endblock scripts %}
+
